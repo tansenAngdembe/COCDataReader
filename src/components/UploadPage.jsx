@@ -1,32 +1,48 @@
 import React, { useState } from 'react'
 
 function UploadPage({ onUpload }) {
-  const [playPointsFile, setPlayPointsFile] = useState(null)
-  const [purchaseHistoryFile, setPurchaseHistoryFile] = useState(null)
-  const [playPointsData, setPlayPointsData] = useState(null)
-  const [purchaseHistoryData, setPurchaseHistoryData] = useState(null)
+  const [files, setFiles] = useState({
+    playPoints: { file: null, data: null, detected: false },
+    purchaseHistory: { file: null, data: null, detected: false },
+    promotionHistory: { file: null, data: null, detected: false }
+  })
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
-  const [dragActive, setDragActive] = useState({ playPoints: false, purchaseHistory: false })
+  const [dragActive, setDragActive] = useState({})
 
-  const processFile = (file, type) => {
+  // Detect data type from JSON structure
+  const detectDataType = (jsonData) => {
+    if (!Array.isArray(jsonData) && typeof jsonData !== 'object') {
+      return null
+    }
+
+    const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData]
+    
+    for (const item of dataArray) {
+      if (item?.playPointsDetails) {
+        return 'playPoints'
+      }
+      if (item?.purchaseHistory) {
+        return 'purchaseHistory'
+      }
+      if (item?.promotionHistory) {
+        return 'promotionHistory'
+      }
+    }
+    
+    return null
+  }
+
+  const processFile = (file, fileId) => {
     if (!file) return
 
     // Validate file type
-    if (!file.name.endsWith('.json') && file.type !== 'application/json') {
+    if (!file.name.endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
       setErrors(prev => ({
         ...prev,
-        [type]: 'Please upload a JSON file'
+        [fileId]: 'Please upload a JSON file'
       }))
       return
-    }
-
-    if (type === 'playPoints') {
-      setPlayPointsFile(file)
-      setErrors(prev => ({ ...prev, playPoints: null }))
-    } else {
-      setPurchaseHistoryFile(file)
-      setErrors(prev => ({ ...prev, purchaseHistory: null }))
     }
 
     // Read and parse the file
@@ -35,75 +51,82 @@ function UploadPage({ onUpload }) {
       try {
         const jsonData = JSON.parse(event.target.result)
         
-        if (type === 'playPoints') {
-          setPlayPointsData(jsonData)
-        } else {
-          setPurchaseHistoryData(jsonData)
+        // Auto-detect data type
+        const detectedType = detectDataType(jsonData)
+        
+        if (!detectedType) {
+          setErrors(prev => ({
+            ...prev,
+            [fileId]: 'Could not detect data type. File must contain playPointsDetails, purchaseHistory, or promotionHistory.'
+          }))
+          return
         }
-        setErrors(prev => ({ ...prev, [type]: null }))
+
+        // Update the detected type's file and data
+        setFiles(prev => ({
+          ...prev,
+          [detectedType]: {
+            file: file,
+            data: jsonData,
+            detected: true
+          }
+        }))
+        
+        setErrors(prev => ({ ...prev, [fileId]: null, [detectedType]: null }))
       } catch (error) {
+        console.error('JSON parse error:', error)
         setErrors(prev => ({
           ...prev,
-          [type]: 'Invalid JSON file. Please check the file format.'
+          [fileId]: `Invalid JSON file: ${error.message}`
         }))
-        if (type === 'playPoints') {
-          setPlayPointsData(null)
-          setPlayPointsFile(null)
-        } else {
-          setPurchaseHistoryData(null)
-          setPurchaseHistoryFile(null)
-        }
       }
     }
+    
     reader.onerror = () => {
       setErrors(prev => ({
         ...prev,
-        [type]: 'Error reading file. Please try again.'
+        [fileId]: 'Error reading file. Please try again.'
       }))
     }
+    
     reader.readAsText(file)
   }
 
-  const handleFileChange = (e, type) => {
+  const handleFileChange = (e, fileId) => {
     const file = e.target.files[0]
-    processFile(file, type)
-  }
-
-  const handleDrag = (e, type) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(prev => ({ ...prev, [type]: true }))
-    } else if (e.type === 'dragleave') {
-      setDragActive(prev => ({ ...prev, [type]: false }))
+    if (file) {
+      processFile(file, fileId)
     }
   }
 
-  const handleDrop = (e, type) => {
+  const handleDrag = (e, fileId) => {
     e.preventDefault()
     e.stopPropagation()
-    setDragActive(prev => ({ ...prev, [type]: false }))
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(prev => ({ ...prev, [fileId]: true }))
+    } else if (e.type === 'dragleave') {
+      setDragActive(prev => ({ ...prev, [fileId]: false }))
+    }
+  }
+
+  const handleDrop = (e, fileId) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(prev => ({ ...prev, [fileId]: false }))
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0], type)
+      processFile(e.dataTransfer.files[0], fileId)
     }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
     
-    const newErrors = {}
+    // Check if at least one file is uploaded
+    const hasAnyData = files.playPoints.data || files.purchaseHistory.data || files.promotionHistory.data
     
-    if (!playPointsFile || !playPointsData) {
-      newErrors.playPoints = 'Please upload Play Points JSON file'
-    }
-    
-    if (!purchaseHistoryFile || !purchaseHistoryData) {
-      newErrors.purchaseHistory = 'Please upload Purchase History JSON file'
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
+    if (!hasAnyData) {
+      setErrors({ general: 'Please upload at least one JSON file' })
       return
     }
 
@@ -112,20 +135,128 @@ function UploadPage({ onUpload }) {
     // Simulate a small delay for better UX
     setTimeout(() => {
       onUpload({
-        playPoints: playPointsData,
-        purchaseHistory: purchaseHistoryData
+        playPoints: files.playPoints.data,
+        purchaseHistory: files.purchaseHistory.data,
+        promotionHistory: files.promotionHistory.data
       })
       setIsLoading(false)
     }, 500)
   }
 
   const handleReset = () => {
-    setPlayPointsFile(null)
-    setPurchaseHistoryFile(null)
-    setPlayPointsData(null)
-    setPurchaseHistoryData(null)
+    setFiles({
+      playPoints: { file: null, data: null, detected: false },
+      purchaseHistory: { file: null, data: null, detected: false },
+      promotionHistory: { file: null, data: null, detected: false }
+    })
     setErrors({})
   }
+
+  const removeFile = (type) => {
+    setFiles(prev => ({
+      ...prev,
+      [type]: { file: null, data: null, detected: false }
+    }))
+    setErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors[type]
+      return newErrors
+    })
+  }
+
+  const FileUploadArea = ({ type, label, description }) => {
+    const fileData = files[type]
+    const isActive = dragActive[type]
+    const hasError = errors[type]
+    const hasFile = fileData.file && fileData.data
+
+    return (
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">
+          {label}
+        </label>
+        <div className="relative">
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => handleFileChange(e, type)}
+            className="hidden"
+            id={`${type}File`}
+          />
+          <label
+            htmlFor={`${type}File`}
+            onDragEnter={(e) => handleDrag(e, type)}
+            onDragLeave={(e) => handleDrag(e, type)}
+            onDragOver={(e) => handleDrag(e, type)}
+            onDrop={(e) => handleDrop(e, type)}
+            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+              isActive
+                ? 'border-blue-400 bg-blue-100 scale-105'
+                : hasError
+                ? 'border-red-300 bg-red-50 hover:bg-red-100'
+                : hasFile
+                ? 'border-green-300 bg-green-50 hover:bg-green-100'
+                : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+            }`}
+          >
+            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+              <svg
+                className={`w-10 h-10 mb-3 ${
+                  hasError
+                    ? 'text-red-500'
+                    : hasFile
+                    ? 'text-green-500'
+                    : 'text-gray-400'
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+              <p className="mb-2 text-sm text-gray-500">
+                <span className="font-semibold">Click to upload</span> or drag and drop
+              </p>
+              <p className="text-xs text-gray-500">{description}</p>
+              {hasFile && (
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="text-sm font-medium text-green-600">
+                    ✓ {fileData.file.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeFile(type)
+                    }}
+                    className="text-red-500 hover:text-red-700 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+          </label>
+        </div>
+        {hasError && (
+          <p className="mt-2 text-sm text-red-600">{errors[type]}</p>
+        )}
+        {hasFile && !hasError && (
+          <p className="mt-2 text-sm text-green-600">
+            ✓ File loaded successfully ({Array.isArray(fileData.data) ? fileData.data.length : '1'} items)
+            {fileData.detected && ` - Detected as ${type === 'playPoints' ? 'Play Points' : type === 'purchaseHistory' ? 'Purchase History' : 'Promotion History'}`}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const hasAnyData = files.playPoints.data || files.purchaseHistory.data || files.promotionHistory.data
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4">
@@ -137,152 +268,37 @@ function UploadPage({ onUpload }) {
               Upload Your Data
             </h1>
             <p className="text-gray-600">
-              Upload your Play Points and Purchase History JSON files
+              Upload your Google Play Store JSON files (any filename accepted)
             </p>
           </div>
 
+          {errors.general && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {errors.general}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Play Points Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Play Points JSON File
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={(e) => handleFileChange(e, 'playPoints')}
-                  className="hidden"
-                  id="playPointsFile"
-                />
-                <label
-                  htmlFor="playPointsFile"
-                  onDragEnter={(e) => handleDrag(e, 'playPoints')}
-                  onDragLeave={(e) => handleDrag(e, 'playPoints')}
-                  onDragOver={(e) => handleDrag(e, 'playPoints')}
-                  onDrop={(e) => handleDrop(e, 'playPoints')}
-                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-                    dragActive.playPoints
-                      ? 'border-blue-400 bg-blue-100 scale-105'
-                      : errors.playPoints
-                      ? 'border-red-300 bg-red-50 hover:bg-red-100'
-                      : playPointsFile
-                      ? 'border-green-300 bg-green-50 hover:bg-green-100'
-                      : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <svg
-                      className={`w-10 h-10 mb-3 ${
-                        errors.playPoints
-                          ? 'text-red-500'
-                          : playPointsFile
-                          ? 'text-green-500'
-                          : 'text-gray-400'
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                    <p className="mb-2 text-sm text-gray-500">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500">JSON files only</p>
-                    {playPointsFile && (
-                      <p className="mt-2 text-sm font-medium text-green-600">
-                        ✓ {playPointsFile.name}
-                      </p>
-                    )}
-                  </div>
-                </label>
-              </div>
-              {errors.playPoints && (
-                <p className="mt-2 text-sm text-red-600">{errors.playPoints}</p>
-              )}
-              {playPointsData && (
-                <p className="mt-2 text-sm text-green-600">
-                  ✓ File loaded successfully ({Array.isArray(playPointsData) ? playPointsData.length : '1'} items)
-                </p>
-              )}
-            </div>
+            <FileUploadArea
+              type="playPoints"
+              label="Play Points JSON File (Optional)"
+              description="Auto-detects files with 'playPointsDetails'"
+            />
 
             {/* Purchase History Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Purchase History JSON File
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={(e) => handleFileChange(e, 'purchaseHistory')}
-                  className="hidden"
-                  id="purchaseHistoryFile"
-                />
-                <label
-                  htmlFor="purchaseHistoryFile"
-                  onDragEnter={(e) => handleDrag(e, 'purchaseHistory')}
-                  onDragLeave={(e) => handleDrag(e, 'purchaseHistory')}
-                  onDragOver={(e) => handleDrag(e, 'purchaseHistory')}
-                  onDrop={(e) => handleDrop(e, 'purchaseHistory')}
-                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-                    dragActive.purchaseHistory
-                      ? 'border-blue-400 bg-blue-100 scale-105'
-                      : errors.purchaseHistory
-                      ? 'border-red-300 bg-red-50 hover:bg-red-100'
-                      : purchaseHistoryFile
-                      ? 'border-green-300 bg-green-50 hover:bg-green-100'
-                      : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <svg
-                      className={`w-10 h-10 mb-3 ${
-                        errors.purchaseHistory
-                          ? 'text-red-500'
-                          : purchaseHistoryFile
-                          ? 'text-green-500'
-                          : 'text-gray-400'
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                    <p className="mb-2 text-sm text-gray-500">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500">JSON files only</p>
-                    {purchaseHistoryFile && (
-                      <p className="mt-2 text-sm font-medium text-green-600">
-                        ✓ {purchaseHistoryFile.name}
-                      </p>
-                    )}
-                  </div>
-                </label>
-              </div>
-              {errors.purchaseHistory && (
-                <p className="mt-2 text-sm text-red-600">{errors.purchaseHistory}</p>
-              )}
-              {purchaseHistoryData && (
-                <p className="mt-2 text-sm text-green-600">
-                  ✓ File loaded successfully ({Array.isArray(purchaseHistoryData) ? purchaseHistoryData.length : '1'} items)
-                </p>
-              )}
-            </div>
+            <FileUploadArea
+              type="purchaseHistory"
+              label="Purchase History JSON File (Optional)"
+              description="Auto-detects files with 'purchaseHistory'"
+            />
+
+            {/* Promotion History Upload */}
+            <FileUploadArea
+              type="promotionHistory"
+              label="Promotion History JSON File (Optional)"
+              description="Auto-detects files with 'promotionHistory'"
+            />
 
             {/* Buttons */}
             <div className="flex gap-4 pt-4">
@@ -295,9 +311,9 @@ function UploadPage({ onUpload }) {
               </button>
               <button
                 type="submit"
-                disabled={isLoading || !playPointsData || !purchaseHistoryData}
+                disabled={isLoading || !hasAnyData}
                 className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
-                  isLoading || !playPointsData || !purchaseHistoryData
+                  isLoading || !hasAnyData
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:scale-105'
                 }`}
@@ -337,10 +353,11 @@ function UploadPage({ onUpload }) {
           <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h3 className="font-semibold text-blue-900 mb-2">Instructions:</h3>
             <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-              <li>Upload your Play Points JSON file (usually named "Play Points.json")</li>
-              <li>Upload your Purchase History JSON file (usually named "Purchase History.json")</li>
-              <li>Both files are required to view the dashboard</li>
-              <li>Files must be valid JSON format</li>
+              <li>Upload any JSON file - the system will auto-detect the data type</li>
+              <li>Files are automatically detected by their content structure</li>
+              <li>You can upload one, two, or all three file types</li>
+              <li>Files must contain: playPointsDetails, purchaseHistory, or promotionHistory</li>
+              <li>All files are optional - upload at least one to view the dashboard</li>
             </ul>
           </div>
         </div>
@@ -350,4 +367,3 @@ function UploadPage({ onUpload }) {
 }
 
 export default UploadPage
-

@@ -35,6 +35,7 @@ function App() {
           <Dashboard
             playPointsData={uploadedData.playPoints}
             purchaseHistoryData={uploadedData.purchaseHistory}
+            promotionHistoryData={uploadedData.promotionHistory}
           />
         </div>
       )}

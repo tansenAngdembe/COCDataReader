@@ -2,10 +2,12 @@ import React, { useState } from 'react'
 import MembershipCard from './MembershipCard'
 import PointsHistory from './PointsHistory'
 import PurchaseHistory from './PurchaseHistory'
+import PromotionHistory from './PromotionHistory'
 
-function Dashboard({ playPointsData, purchaseHistoryData }) {
+function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }) {
   const [playPoints, setPlayPoints] = useState([])
   const [purchaseHistory, setPurchaseHistory] = useState([])
+  const [promotionHistory, setPromotionHistory] = useState([])
   const [membership, setMembership] = useState(null)
   const [activeTab, setActiveTab] = useState('membership')
 
@@ -29,7 +31,26 @@ function Dashboard({ playPointsData, purchaseHistoryData }) {
       item => item.purchaseHistory
     ) || []
     setPurchaseHistory(purchases)
-  }, [playPointsData, purchaseHistoryData])
+
+    // Set promotion history
+    const promotions = promotionHistoryData?.filter(
+      item => item.promotionHistory
+    ) || []
+    setPromotionHistory(promotions)
+
+    // Set initial tab based on available data
+    if (!membership && playPoints.length === 0 && purchases.length === 0 && promotions.length === 0) {
+      // No data available
+    } else if (membership) {
+      setActiveTab('membership')
+    } else if (playPoints.length > 0) {
+      setActiveTab('points')
+    } else if (purchases.length > 0) {
+      setActiveTab('purchases')
+    } else if (promotions.length > 0) {
+      setActiveTab('promotions')
+    }
+  }, [playPointsData, purchaseHistoryData, promotionHistoryData])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -46,37 +67,55 @@ function Dashboard({ playPointsData, purchaseHistoryData }) {
 
         {/* Tabs */}
         <div className="mb-6">
-          <div className="flex space-x-2 border-b border-gray-200">
-            <button
-              onClick={() => setActiveTab('membership')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'membership'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Membership
-            </button>
-            <button
-              onClick={() => setActiveTab('points')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'points'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Points History ({playPoints.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('purchases')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'purchases'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Purchase History ({purchaseHistory.length})
-            </button>
+          <div className="flex space-x-2 border-b border-gray-200 overflow-x-auto">
+            {membership && (
+              <button
+                onClick={() => setActiveTab('membership')}
+                className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'membership'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Membership
+              </button>
+            )}
+            {playPoints.length > 0 && (
+              <button
+                onClick={() => setActiveTab('points')}
+                className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'points'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Points History ({playPoints.length})
+              </button>
+            )}
+            {purchaseHistory.length > 0 && (
+              <button
+                onClick={() => setActiveTab('purchases')}
+                className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'purchases'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Purchase History ({purchaseHistory.length})
+              </button>
+            )}
+            {promotionHistory.length > 0 && (
+              <button
+                onClick={() => setActiveTab('promotions')}
+                className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'promotions'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Promotion History ({promotionHistory.length})
+              </button>
+            )}
           </div>
         </div>
 
@@ -95,6 +134,9 @@ function Dashboard({ playPointsData, purchaseHistoryData }) {
           )}
           {activeTab === 'purchases' && (
             <PurchaseHistory purchases={purchaseHistory} />
+          )}
+          {activeTab === 'promotions' && (
+            <PromotionHistory promotions={promotionHistory} />
           )}
         </div>
       </div>
