@@ -36,6 +36,7 @@ function App() {
             playPointsData={uploadedData.playPoints}
             purchaseHistoryData={uploadedData.purchaseHistory}
             promotionHistoryData={uploadedData.promotionHistory}
+            orderHistoryData={uploadedData.orderHistory}
           />
         </div>
       )}

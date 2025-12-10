@@ -4,7 +4,8 @@ function UploadPage({ onUpload }) {
   const [files, setFiles] = useState({
     playPoints: { file: null, data: null, detected: false },
     purchaseHistory: { file: null, data: null, detected: false },
-    promotionHistory: { file: null, data: null, detected: false }
+    promotionHistory: { file: null, data: null, detected: false },
+    orderHistory: { file: null, data: null, detected: false }
   })
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
@@ -12,22 +13,30 @@ function UploadPage({ onUpload }) {
 
   // Detect data type from JSON structure
   const detectDataType = (jsonData) => {
-    if (!Array.isArray(jsonData) && typeof jsonData !== 'object') {
-      return null
-    }
+    try {
+      if (!Array.isArray(jsonData) && typeof jsonData !== 'object') {
+        return null
+      }
 
-    const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData]
-    
-    for (const item of dataArray) {
-      if (item?.playPointsDetails) {
-        return 'playPoints'
+      const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData]
+      
+      for (const item of dataArray) {
+        if (item?.playPointsDetails) {
+          return 'playPoints'
+        }
+        if (item?.purchaseHistory) {
+          return 'purchaseHistory'
+        }
+        if (item?.promotionHistory) {
+          return 'promotionHistory'
+        }
+        if (item?.orderHistory) {
+          return 'orderHistory'
+        }
       }
-      if (item?.purchaseHistory) {
-        return 'purchaseHistory'
-      }
-      if (item?.promotionHistory) {
-        return 'promotionHistory'
-      }
+    } catch (error) {
+      console.error('Error detecting data type:', error)
+      return null
     }
     
     return null
@@ -49,7 +58,35 @@ function UploadPage({ onUpload }) {
     const reader = new FileReader()
     reader.onload = (event) => {
       try {
-        const jsonData = JSON.parse(event.target.result)
+        const fileContent = event.target.result
+        
+        if (!fileContent || fileContent.trim().length === 0) {
+          setErrors(prev => ({
+            ...prev,
+            [fileId]: 'File is empty. Please upload a valid JSON file.'
+          }))
+          return
+        }
+
+        let jsonData
+        try {
+          jsonData = JSON.parse(fileContent)
+        } catch (parseError) {
+          setErrors(prev => ({
+            ...prev,
+            [fileId]: `Invalid JSON format: ${parseError.message}. Please check the file syntax.`
+          }))
+          return
+        }
+        
+        // Validate JSON structure
+        if (jsonData === null || (typeof jsonData !== 'object' && !Array.isArray(jsonData))) {
+          setErrors(prev => ({
+            ...prev,
+            [fileId]: 'Invalid JSON structure. File must contain an object or array.'
+          }))
+          return
+        }
         
         // Auto-detect data type
         const detectedType = detectDataType(jsonData)
@@ -57,7 +94,7 @@ function UploadPage({ onUpload }) {
         if (!detectedType) {
           setErrors(prev => ({
             ...prev,
-            [fileId]: 'Could not detect data type. File must contain playPointsDetails, purchaseHistory, or promotionHistory.'
+            [fileId]: 'Could not detect data type. File must contain playPointsDetails, purchaseHistory, promotionHistory, or orderHistory.'
           }))
           return
         }
@@ -74,22 +111,37 @@ function UploadPage({ onUpload }) {
         
         setErrors(prev => ({ ...prev, [fileId]: null, [detectedType]: null }))
       } catch (error) {
-        console.error('JSON parse error:', error)
+        console.error('File processing error:', error)
         setErrors(prev => ({
           ...prev,
-          [fileId]: `Invalid JSON file: ${error.message}`
+          [fileId]: `Error processing file: ${error.message || 'Unknown error occurred'}`
         }))
       }
     }
     
-    reader.onerror = () => {
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error)
       setErrors(prev => ({
         ...prev,
-        [fileId]: 'Error reading file. Please try again.'
+        [fileId]: 'Error reading file. The file may be corrupted or inaccessible. Please try again.'
       }))
     }
     
-    reader.readAsText(file)
+    reader.onabort = () => {
+      setErrors(prev => ({
+        ...prev,
+        [fileId]: 'File reading was aborted. Please try again.'
+      }))
+    }
+    
+    try {
+      reader.readAsText(file)
+    } catch (error) {
+      setErrors(prev => ({
+        ...prev,
+        [fileId]: `Failed to read file: ${error.message}`
+      }))
+    }
   }
 
   const handleFileChange = (e, fileId) => {
@@ -122,32 +174,47 @@ function UploadPage({ onUpload }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     
-    // Check if at least one file is uploaded
-    const hasAnyData = files.playPoints.data || files.purchaseHistory.data || files.promotionHistory.data
-    
-    if (!hasAnyData) {
-      setErrors({ general: 'Please upload at least one JSON file' })
-      return
-    }
+    try {
+      // Check if at least one file is uploaded
+      const hasAnyData = files.playPoints.data || files.purchaseHistory.data || 
+                        files.promotionHistory.data || files.orderHistory.data
+      
+      if (!hasAnyData) {
+        setErrors({ general: 'Please upload at least one JSON file' })
+        return
+      }
 
-    setIsLoading(true)
-    
-    // Simulate a small delay for better UX
-    setTimeout(() => {
-      onUpload({
-        playPoints: files.playPoints.data,
-        purchaseHistory: files.purchaseHistory.data,
-        promotionHistory: files.promotionHistory.data
-      })
+      setIsLoading(true)
+      
+      // Simulate a small delay for better UX
+      setTimeout(() => {
+        try {
+          onUpload({
+            playPoints: files.playPoints.data,
+            purchaseHistory: files.purchaseHistory.data,
+            promotionHistory: files.promotionHistory.data,
+            orderHistory: files.orderHistory.data
+          })
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError)
+          setErrors({ general: `Failed to process upload: ${uploadError.message}` })
+        } finally {
+          setIsLoading(false)
+        }
+      }, 500)
+    } catch (error) {
+      console.error('Submit error:', error)
+      setErrors({ general: `An error occurred: ${error.message}` })
       setIsLoading(false)
-    }, 500)
+    }
   }
 
   const handleReset = () => {
     setFiles({
       playPoints: { file: null, data: null, detected: false },
       purchaseHistory: { file: null, data: null, detected: false },
-      promotionHistory: { file: null, data: null, detected: false }
+      promotionHistory: { file: null, data: null, detected: false },
+      orderHistory: { file: null, data: null, detected: false }
     })
     setErrors({})
   }
@@ -256,7 +323,8 @@ function UploadPage({ onUpload }) {
     )
   }
 
-  const hasAnyData = files.playPoints.data || files.purchaseHistory.data || files.promotionHistory.data
+  const hasAnyData = files.playPoints.data || files.purchaseHistory.data || 
+                    files.promotionHistory.data || files.orderHistory.data
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4">
@@ -279,26 +347,36 @@ function UploadPage({ onUpload }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Play Points Upload */}
-            <FileUploadArea
-              type="playPoints"
-              label="Play Points JSON File (Optional)"
-              description="Auto-detects files with 'playPointsDetails'"
-            />
+            {/* File Upload Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Play Points Upload */}
+              <FileUploadArea
+                type="playPoints"
+                label="Play Points JSON File (Optional)"
+                description="Auto-detects files with 'playPointsDetails'"
+              />
 
-            {/* Purchase History Upload */}
-            <FileUploadArea
-              type="purchaseHistory"
-              label="Purchase History JSON File (Optional)"
-              description="Auto-detects files with 'purchaseHistory'"
-            />
+              {/* Purchase History Upload */}
+              <FileUploadArea
+                type="purchaseHistory"
+                label="Purchase History JSON File (Optional)"
+                description="Auto-detects files with 'purchaseHistory'"
+              />
 
-            {/* Promotion History Upload */}
-            <FileUploadArea
-              type="promotionHistory"
-              label="Promotion History JSON File (Optional)"
-              description="Auto-detects files with 'promotionHistory'"
-            />
+              {/* Promotion History Upload */}
+              <FileUploadArea
+                type="promotionHistory"
+                label="Promotion History JSON File (Optional)"
+                description="Auto-detects files with 'promotionHistory'"
+              />
+
+              {/* Order History Upload */}
+              <FileUploadArea
+                type="orderHistory"
+                label="Order History JSON File (Optional)"
+                description="Auto-detects files with 'orderHistory'"
+              />
+            </div>
 
             {/* Buttons */}
             <div className="flex gap-4 pt-4">
@@ -356,7 +434,7 @@ function UploadPage({ onUpload }) {
               <li>Upload any JSON file - the system will auto-detect the data type</li>
               <li>Files are automatically detected by their content structure</li>
               <li>You can upload one, two, or all three file types</li>
-              <li>Files must contain: playPointsDetails, purchaseHistory, or promotionHistory</li>
+              <li>Files must contain: playPointsDetails, purchaseHistory, promotionHistory, or orderHistory</li>
               <li>All files are optional - upload at least one to view the dashboard</li>
             </ul>
           </div>

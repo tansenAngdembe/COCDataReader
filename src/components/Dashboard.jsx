@@ -3,11 +3,13 @@ import MembershipCard from './MembershipCard'
 import PointsHistory from './PointsHistory'
 import PurchaseHistory from './PurchaseHistory'
 import PromotionHistory from './PromotionHistory'
+import OrderHistory from './OrderHistory'
 
-function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }) {
+function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData, orderHistoryData }) {
   const [playPoints, setPlayPoints] = useState([])
   const [purchaseHistory, setPurchaseHistory] = useState([])
   const [promotionHistory, setPromotionHistory] = useState([])
+  const [orderHistory, setOrderHistory] = useState([])
   const [membership, setMembership] = useState(null)
   const [activeTab, setActiveTab] = useState('membership')
 
@@ -38,8 +40,15 @@ function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }
     ) || []
     setPromotionHistory(promotions)
 
+    // Set order history
+    const orders = orderHistoryData?.filter(
+      item => item.orderHistory
+    ) || []
+    setOrderHistory(orders)
+
     // Set initial tab based on available data
-    if (!membership && playPoints.length === 0 && purchases.length === 0 && promotions.length === 0) {
+    if (!membership && playPoints.length === 0 && purchases.length === 0 && 
+        promotions.length === 0 && orders.length === 0) {
       // No data available
     } else if (membership) {
       setActiveTab('membership')
@@ -49,8 +58,10 @@ function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }
       setActiveTab('purchases')
     } else if (promotions.length > 0) {
       setActiveTab('promotions')
+    } else if (orders.length > 0) {
+      setActiveTab('orders')
     }
-  }, [playPointsData, purchaseHistoryData, promotionHistoryData])
+  }, [playPointsData, purchaseHistoryData, promotionHistoryData, orderHistoryData])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -116,6 +127,18 @@ function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }
                 Promotion History ({promotionHistory.length})
               </button>
             )}
+            {orderHistory.length > 0 && (
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'orders'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Order History ({orderHistory.length})
+              </button>
+            )}
           </div>
         </div>
 
@@ -137,6 +160,9 @@ function Dashboard({ playPointsData, purchaseHistoryData, promotionHistoryData }
           )}
           {activeTab === 'promotions' && (
             <PromotionHistory promotions={promotionHistory} />
+          )}
+          {activeTab === 'orders' && (
+            <OrderHistory orders={orderHistory} />
           )}
         </div>
       </div>
